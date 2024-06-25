@@ -757,15 +757,20 @@ for testing purposes only!
 	else
 	{
 #endif
-	rc = writev(socket, iovecs, count);
-	if (rc == SOCKET_ERROR)
-	{
-		int err = Socket_error("writev - putdatas", socket);
-		if (err == EWOULDBLOCK || err == EAGAIN)
-			rc = TCPSOCKET_INTERRUPTED;
-	}
-	else
-		*bytes = rc;
+    for (int i=0; i<count; i++)
+    {
+        rc = send(socket, iovecs[i].iov_base, iovecs[i].iov_len, MSG_NOSIGNAL);
+        if (rc == SOCKET_ERROR)
+        {
+            int err = Socket_error("writev - putdatas", socket);
+            if (err == EWOULDBLOCK || err == EAGAIN)
+                rc = TCPSOCKET_INTERRUPTED;
+
+            break;
+        }
+        else
+            *bytes = *bytes + rc;
+    }
 #if defined(TCPSOCKET_INTERRUPTED_TESTING)
 	}
 #endif
