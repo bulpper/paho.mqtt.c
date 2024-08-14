@@ -714,6 +714,7 @@ int Socket_noPendingWrites(SOCKET socket)
  *  @param bytes number of bytes actually written returned
  *  @return completion code, especially TCPSOCKET_INTERRUPTED
  */
+
 int Socket_writev(SOCKET socket, iobuf* iovecs, int count, unsigned long* bytes)
 {
 	int rc;
@@ -757,15 +758,32 @@ for testing purposes only!
 	else
 	{
 #endif
-	rc = writev(socket, iovecs, count);
-	if (rc == SOCKET_ERROR)
-	{
-		int err = Socket_error("writev - putdatas", socket);
-		if (err == EWOULDBLOCK || err == EAGAIN)
-			rc = TCPSOCKET_INTERRUPTED;
-	}
-	else
-		*bytes = rc;
+    size_t sDataSz = 0;
+    size_t sDataOffs = 0;
+
+    for (int i=0; i<count; i++) {
+        sDataSz += iovecs[i].iov_len;
+    }
+
+    void free_scratch(void **buffer) { if (buffer && *buffer) free(*buffer); }
+
+    void *pScratch __attribute__((cleanup(free_scratch))) = malloc(sDataSz);
+
+    if (pScratch) {
+        for (int i=0; i<count; i++) {
+            memcpy(pScratch + sDataOffs, iovecs[i].iov_base, iovecs[i].iov_len);
+            sDataOffs += iovecs[i].iov_len;
+        }
+
+        rc = send(socket, pScratch, sDataSz, MSG_NOSIGNAL);
+        if (rc == SOCKET_ERROR) {
+            int err = Socket_error("writev - putdatas", socket);
+            if (err == EWOULDBLOCK || err == EAGAIN)
+                rc = TCPSOCKET_INTERRUPTED;
+        }
+        else
+            *bytes = rc;
+    }
 #if defined(TCPSOCKET_INTERRUPTED_TESTING)
 	}
 #endif
